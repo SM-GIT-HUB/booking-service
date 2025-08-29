@@ -112,5 +112,4 @@ class CrudService {
     }
 }
 
-
 module.exports = CrudService
