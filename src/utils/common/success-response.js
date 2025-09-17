@@ -1,10 +1,10 @@
 
 class SuccessResponse {
-    constructor()
+    constructor(message, data)
     {
         this.success = true;
-        this.message = "Successfully completed the request";
-        this.data = {};
+        this.message = message? message : "Successfully completed the request";
+        this.data = data? data : {};
         this.error = {};
     }
 }

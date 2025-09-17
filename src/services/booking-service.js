@@ -1,4 +1,5 @@
 const axios = require("axios")
+const { ENUMS } = require("../utils/common")
 const { StatusCodes } = require("http-status-codes")
 
 const db = require("../models")
@@ -6,6 +7,7 @@ const { ServerConfig } = require("../config")
 const CrudService = require("./crud-service")
 const AppError = require("../utils/errors/app-error")
 const { BookingRepository } = require("../repositories")
+const { compareTimeWithDiff } = require("../utils/helpers/date-time-helper")
 
 const bookingRepository = new BookingRepository();
 
@@ -29,10 +31,10 @@ class BookingService extends CrudService {
 
             const billingAmount = data.numberOfSeats * flight.price;
             const bookingPayload = { ...data, totalCost: billingAmount };
-
             const booking = await bookingRepository.createBooking(bookingPayload, trn);
+
             await axios.patch(`${ServerConfig.FLIGHT_SERVICE_URL}/api/v1/flights/${data.flightId}/seats`, {
-                seatss: data.numberOfSeats,
+                seats: data.numberOfSeats,
                 dec: 1
             })
             
@@ -41,6 +43,48 @@ class BookingService extends CrudService {
         }
         catch(err) {
             await trn.rollback();
+            console.log(err.message);
+
+            if (err instanceof AppError) {
+                throw err;
+            }
+
+            throw new AppError(err.message, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    async makePayment(data)
+    {
+        const trn = await db.sequelize.transaction();
+
+        try {
+            const bookingDetails = await bookingRepository.get(data.bookingId);
+
+            if (bookingDetails.status == ENUMS.BOOKING_STATUS.BOOKED) {
+                throw new AppError("Payment already done", StatusCodes.CONFLICT);
+            }
+
+            if (bookingDetails.status == ENUMS.BOOKING_STATUS.CANCELLED) {
+                throw new AppError("Booking is cancelled, please try again", StatusCodes.CONFLICT);
+            }
+            
+            if (bookingDetails.totalCost != data.totalCost || bookingDetails.userId != data.userId) {
+                throw new AppError("Payment details do not match", StatusCodes.BAD_REQUEST);
+            }
+
+            if (!compareTimeWithDiff(bookingDetails.createdAt, new Date(), 10)) {
+                await bookingRepository.update(data.bookingId, { status: ENUMS.BOOKING_STATUS.CANCELLED });
+                throw new AppError("Payment gateaway expired, please book again", StatusCodes.GATEWAY_TIMEOUT);
+            }
+            
+            const [response] = await bookingRepository.update(data.bookingId, { status: ENUMS.BOOKING_STATUS.BOOKED }, trn);
+
+            await trn.commit();
+            return response;
+        }
+        catch(err) {
+            await trn.rollback();
+
             if (err instanceof AppError) {
                 throw err;
             }
