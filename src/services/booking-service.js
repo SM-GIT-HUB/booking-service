@@ -8,6 +8,7 @@ const CrudService = require("./crud-service")
 const AppError = require("../utils/errors/app-error")
 const { BookingRepository } = require("../repositories")
 const { compareTimeWithDiff } = require("../utils/helpers/date-time-helper")
+const { Op } = require("sequelize")
 
 const bookingRepository = new BookingRepository();
 
@@ -99,7 +100,7 @@ class BookingService extends CrudService {
                 throw new AppError("Payment details do not match", StatusCodes.BAD_REQUEST);
             }
 
-            if (!compareTimeWithDiff(bookingDetails.createdAt, new Date(), 1)) {
+            if (!compareTimeWithDiff(bookingDetails.createdAt, new Date(), 5)) {
                 await this.cancelBooking(data.bookingId);
                 throw new AppError("Payment gateaway expired, please book again", StatusCodes.GATEWAY_TIMEOUT);
             }
@@ -117,6 +118,28 @@ class BookingService extends CrudService {
             }
 
             throw new AppError(err.message, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    async cancelOldBookings()
+    {
+        try {
+            const objs = await bookingRepository.getAll(
+                {
+                    createdAt: { [Op.lt]: new Date(Date.now() - 5 * 60 * 1000) },
+                    status: { [Op.notIn]: [ENUMS.BOOKING_STATUS.CANCELLED, ENUMS.BOOKING_STATUS.BOOKED] }
+                }
+            )
+
+            for (const obj of objs)
+            {
+                await this.cancelBooking(obj.id);
+            }
+
+            return objs.length;
+        }
+        catch(err) {
+            return 0;
         }
     }
 }

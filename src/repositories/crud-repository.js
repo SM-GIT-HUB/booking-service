@@ -40,9 +40,9 @@ class CrudRepository {
         return response;
     }
 
-    async getAll()
+    async getAll(filter = {})
     {
-        const response = await this.model.findAll();
+        const response = await this.model.findAll({ where: filter });
         return response;
     }
 
