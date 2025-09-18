@@ -1,6 +1,6 @@
 const express = require("express");
-const { BookingController } = require("../../controllers");
-const { BookingMiddleware } = require("../../middlewares");
+const { BookingController } = require("../../controllers")
+const { BookingMiddleware } = require("../../middlewares")
 
 const router = express.Router();
 

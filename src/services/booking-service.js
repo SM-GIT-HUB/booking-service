@@ -53,6 +53,33 @@ class BookingService extends CrudService {
         }
     }
 
+    async cancelBooking(bookingId)
+    {
+        const trn = await db.sequelize.transaction();
+
+        try {
+            const bookingDetails = await bookingRepository.get(bookingId);
+
+            if (bookingDetails.status == ENUMS.BOOKING_STATUS.CANCELLED) {
+                trn.commit();
+                return true;
+            }
+
+            await bookingRepository.update(bookingId, { status: ENUMS.BOOKING_STATUS.CANCELLED }, trn);
+            await axios.patch(`${ServerConfig.FLIGHT_SERVICE_URL}/api/v1/flights/${bookingDetails.flightId}/seats`, {
+                seats: bookingDetails.numberOfSeats,
+                dec: 0
+            })
+            
+            await trn.commit();
+            return true;
+        }
+        catch(err) {
+            await trn.rollback();
+            return false;
+        }
+    }
+
     async makePayment(data)
     {
         const trn = await db.sequelize.transaction();
@@ -72,8 +99,8 @@ class BookingService extends CrudService {
                 throw new AppError("Payment details do not match", StatusCodes.BAD_REQUEST);
             }
 
-            if (!compareTimeWithDiff(bookingDetails.createdAt, new Date(), 10)) {
-                await bookingRepository.update(data.bookingId, { status: ENUMS.BOOKING_STATUS.CANCELLED });
+            if (!compareTimeWithDiff(bookingDetails.createdAt, new Date(), 1)) {
+                await this.cancelBooking(data.bookingId);
                 throw new AppError("Payment gateaway expired, please book again", StatusCodes.GATEWAY_TIMEOUT);
             }
             
