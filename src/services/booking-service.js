@@ -123,6 +123,8 @@ class BookingService extends CrudService {
 
     async cancelOldBookings()
     {
+        const trn = await db.sequelize.transaction();
+
         try {
             const objs = await bookingRepository.getAll(
                 {
@@ -131,14 +133,26 @@ class BookingService extends CrudService {
                 }
             )
 
+            await bookingRepository.bulkUpdate({ status: ENUMS.BOOKING_STATUS.CANCELLED }, {
+                where: {
+                    createdAt: { [Op.lt]: new Date(Date.now() - 5 * 60 * 1000) },
+                    status: { [Op.notIn]: [ENUMS.BOOKING_STATUS.CANCELLED, ENUMS.BOOKING_STATUS.BOOKED] }
+                }
+            }, trn)
+
             for (const obj of objs)
             {
-                await this.cancelBooking(obj.id);
+                await axios.patch(`${ServerConfig.FLIGHT_SERVICE_URL}/api/v1/flights/${obj.flightId}/seats`, {
+                    seats: obj.numberOfSeats,
+                    dec: 0
+                })
             }
-
+            
+            await trn.commit();
             return objs.length;
         }
         catch(err) {
+            await trn.rollback();
             return 0;
         }
     }

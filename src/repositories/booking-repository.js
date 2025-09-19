@@ -30,6 +30,12 @@ class BookingRepository extends CrudRepository {
 
         return response;
     }
+
+    async bulkUpdate(data, filter, trn)
+    {
+        const response = await this.model.update(data, { ...filter, transaction: trn });
+        return response;
+    }
 }
 
 module.exports = BookingRepository
